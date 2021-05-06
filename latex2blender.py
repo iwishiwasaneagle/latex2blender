@@ -21,9 +21,10 @@ from bpy.props import (StringProperty,
                        )
 
 from bpy.types import (Panel,
+                       Material,
                        Menu,
                        Operator,
-                       PropertyGroup
+                       PropertyGroup,
                        )
 
 from bl_operators.presets import AddPresetBase
@@ -89,6 +90,18 @@ class Settings(PropertyGroup):
         default=0.0,
     )
 
+    custom_material_bool: BoolProperty(
+        name="Override Default Material",
+        description="Use a custom material",
+        default=False
+    )
+    
+    custom_material_value: PointerProperty(
+        type=Material,
+        name="Material",
+        description="Material to apply to all imported objects"
+    )
+
     custom_preamble_bool: BoolProperty(
         name="Use Custom Preamble",
         description="Use a custom preamble",
@@ -111,7 +124,7 @@ def ErrorMessageBox(message, title):
 
 # Imports compiled latex code into blender given chosen settings.
 def import_latex(self, context, latex_code, text_scale, x_loc, y_loc, z_loc, x_rot, y_rot, z_rot, custom_preamble_bool,
-                 temp_dir, preamble_path=None):
+                 temp_dir, custom_material_bool, custom_material_value, preamble_path=None):
 
     # Set current directory to temp_directory
     current_dir = os.getcwd()
@@ -180,6 +193,9 @@ def import_latex(self, context, latex_code, text_scale, x_loc, y_loc, z_loc, x_r
             bpy.ops.object.move_to_collection(collection_index=0)
             bpy.data.collections.remove(temp_svg_collection)
             active_obj.name = 'Latex Figure'
+
+            if custom_material_bool:
+                active_obj.material_slots[0].material = custom_material_value
     except FileNotFoundError as e:
         ErrorMessageBox("Please check that LaTeX is installed on your system.", "Compilation Error")
     except subprocess.CalledProcessError:
@@ -249,7 +265,7 @@ class WM_OT_compile(Operator):
         else:
             with tempfile.TemporaryDirectory() as temp_dir:
                 import_latex(self, context, t.latex_code, t.text_scale, t.x_loc, t.y_loc, t.z_loc, t.x_rot, t.y_rot,
-                             t.z_rot, t.custom_preamble_bool, temp_dir, t.preamble_path)
+                             t.z_rot, t.custom_preamble_bool, temp_dir, t.custom_material_bool, t.custom_material_value, t.preamble_path)
         return {'FINISHED'}
 
 
@@ -286,6 +302,12 @@ class OBJECT_PT_latex2blender_panel(Panel):
         col.prop(latex2blender_tool, "x_rot")
         col.prop(latex2blender_tool, "y_rot")
         col.prop(latex2blender_tool, "z_rot")
+
+        layout.separator()
+
+        layout.prop(latex2blender_tool, "custom_material_bool")
+        if latex2blender_tool.custom_material_bool:
+            layout.prop(latex2blender_tool, "custom_material_value")
 
         layout.separator()
 
