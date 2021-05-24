@@ -91,7 +91,7 @@ class Settings(PropertyGroup):
     )
 
     custom_material_bool: BoolProperty(
-        name="Override Default Material",
+        name="Use Custom Material",
         description="Use a custom material",
         default=False
     )
@@ -99,7 +99,7 @@ class Settings(PropertyGroup):
     custom_material_value: PointerProperty(
         type=Material,
         name="Material",
-        description="Material to apply to all imported objects"
+        description="Choose a material"
     )
 
     custom_preamble_bool: BoolProperty(
@@ -258,6 +258,8 @@ class WM_OT_compile(Operator):
                 and t.preamble_path == '':
             ErrorMessageBox("No Latex code has been entered and no preamble file has been chosen. Please enter some "
                             "latex code and choose a .tex file for the preamble", "Multiple Errors")
+        elif t.custom_material_bool and t.custom_material_value is None:
+            ErrorMessageBox("No material has been chosen. Please choose a material.", "Custom Material Error")
         elif t.latex_code == '':
             ErrorMessageBox("No Latex code has been entered. Please enter some Latex code.", "Latex Code Error")
         elif t.custom_preamble_bool and t.preamble_path == '':
