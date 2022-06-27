@@ -1,8 +1,8 @@
 bl_info = {
     "name": "latex2blender",
-    "description": "Enables user to write Latex in Blender.",
+    "description": "Enables user to write LaTeX in Blender.",
     "author": "Peter K. Johnson and George H. Seelinger",
-    "version": (1, 0, 3),
+    "version": (1, 0, 5),
     "blender": (2, 80, 0),
     "location": "View3D > Sidebar",
     "warning": "",
@@ -39,13 +39,40 @@ import shutil
 import math
 
 
+def rel_to_abs(sp_name):
+    if bpy.context.scene.my_tool[sp_name].startswith('//'):
+        abs_path = os.path.abspath(bpy.path.abspath(bpy.context.scene.my_tool[sp_name]))
+        bpy.context.scene.my_tool[sp_name] = abs_path
+
 # Various settings.
 class Settings(PropertyGroup):
 
     latex_code: StringProperty(
-        name="Latex",
+        name="LaTeX Code",
         description="Enter Latex Code",
         default="",
+    )
+
+    custom_latex_path: StringProperty(
+        name="latex Path",
+        description="""
+        Enter the path of the folder containing the latex command
+        on your computer. If you are not sure where the latex command is
+        located, open your terminal/command prompt and type: \"where latex\" """,
+        default = "",
+        update  = lambda s,c: rel_to_abs('custom_latex_path'),
+        subtype = 'DIR_PATH',
+    )
+
+    custom_dvisvgm_path: StringProperty(
+        name="dvisvgm Path",
+        description="""
+        Enter the path of the folder containing the dvisvgm command
+        on your computer. If you are not sure where the dvisvgm command is
+        located, open your terminal/command prompt and type: \"where dvisvgm\" """,
+        default = "",
+        update  = lambda s,c: rel_to_abs('custom_dvisvgm_path'),
+        subtype = 'DIR_PATH',
     )
 
     text_scale: FloatProperty(
@@ -95,7 +122,7 @@ class Settings(PropertyGroup):
         description="Use a custom material",
         default=False
     )
-    
+
     custom_material_value: PointerProperty(
         type=Material,
         name="Material",
@@ -112,6 +139,7 @@ class Settings(PropertyGroup):
         name="Preamble",
         description="Choose a .tex file for the preamble",
         default="",
+        update  = lambda s,c: rel_to_abs('preamble_path'),
         subtype='FILE_PATH'
     )
 
@@ -123,8 +151,8 @@ def ErrorMessageBox(message, title):
 
 
 # Imports compiled latex code into blender given chosen settings.
-def import_latex(self, context, latex_code, text_scale, x_loc, y_loc, z_loc, x_rot, y_rot, z_rot, custom_preamble_bool,
-                 temp_dir, custom_material_bool, custom_material_value, preamble_path=None):
+def import_latex(self, context, latex_code, custom_latex_path, custom_dvisvgm_path, text_scale, x_loc, y_loc, z_loc, x_rot, y_rot, z_rot, custom_preamble_bool,
+                 temp_dir, custom_material_bool, custom_material_value, compile_mode, preamble_path=None):
 
     # Set current directory to temp_directory
     current_dir = os.getcwd()
@@ -153,23 +181,27 @@ def import_latex(self, context, latex_code, text_scale, x_loc, y_loc, z_loc, x_r
         local_env = os.environ.copy()
         local_env['PATH'] = (latex_exec_path + os.pathsep + local_env['PATH'])
 
+        if custom_latex_path != "" and custom_latex_path != '/Library/TeX/texbin':
+            local_env['PATH'] = (custom_latex_path + os.pathsep + local_env['PATH'])
+
+        if custom_dvisvgm_path != "" and custom_dvisvgm_path != custom_latex_path and custom_dvisvgm_path != '/Library/TeX/texbin':
+            local_env['PATH'] = (custom_dvisvgm_path + os.pathsep + local_env['PATH'])
+
         subprocess.call(["latex", "-interaction=batchmode", temp_file_name + ".tex"], env=local_env)
         subprocess.call(["dvisvgm", "--no-fonts", temp_file_name + ".dvi"], env=local_env)
 
-        objects_before_import = bpy.data.objects[:]
-
+        svg_file_list = glob.glob("*.svg")
         bpy.ops.object.select_all(action='DESELECT')
 
-
-        svg_file_list = glob.glob("*.svg")
-
         if len(svg_file_list) == 0:
-            ErrorMessageBox("Please check your latex code for errors and that latex and dvisvgm are properly "
-                            "installed. Also, if using a custom preamble, check that it is formatted correctly.",
+            ErrorMessageBox("Please check your LaTeX code for errors and that LaTeX and dvisvgm are properly "
+                            "installed and their paths are specified correctly. Also, if using a custom preamble, check that it is formatted correctly.",
                             "Compilation Error")
         else:
-            # Import svg into blender as curve
             svg_file_path = temp_dir + os.sep + svg_file_list[0]
+
+            objects_before_import = bpy.data.objects[:]
+            # Import svg into blender as curve
             bpy.ops.import_curve.svg(filepath=svg_file_path)
 
             # Select imported objects
@@ -179,31 +211,49 @@ def import_latex(self, context, latex_code, text_scale, x_loc, y_loc, z_loc, x_r
             for x in imported_curve:
                 x.select_set(True)
 
-            # Convert to Mesh
-            bpy.ops.object.convert(target='MESH')
-
             # Adjust scale, location, and rotation.
             bpy.ops.object.join()
             bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS', center='MEDIAN')
             active_obj.scale = (600*text_scale, 600*text_scale, 600*text_scale)
             active_obj.location = (x_loc, y_loc, z_loc)
             active_obj.rotation_euler = (math.radians(x_rot), math.radians(y_rot), math.radians(z_rot))
-            # Move mesh to scene collection and delete the temp.svg collection. Then rename mesh.
+            # Move curve to scene collection and delete the temp.svg collection. Then rename curve.
             temp_svg_collection = active_obj.users_collection[0]
             bpy.ops.object.move_to_collection(collection_index=0)
             bpy.data.collections.remove(temp_svg_collection)
-            active_obj.name = 'Latex Figure'
+            active_obj.name = 'LaTeX Figure'
 
             if custom_material_bool:
                 active_obj.material_slots[0].material = custom_material_value
+
+            if compile_mode == "mesh":
+                # Convert to mesh
+                bpy.ops.object.convert(target='MESH')
+
+
+            if compile_mode == "grease pencil":
+                # Convert to mesh
+                bpy.ops.object.convert(target='MESH')
+                # Then convert to grease pencil
+                bpy.ops.object.convert(target='GPENCIL', angle=0, thickness=1, seams=True, faces=True, offset=0)
+                # Moves to scene collection, fixes name.
+                bpy.ops.object.move_to_collection(collection_index=0)
+                bpy.context.selected_objects[0].name = "LaTeX Figure"
+                if custom_material_bool:
+                    bpy.context.selected_objects[0].material_slots[0].material = custom_material_value
+
+            # Create custom property that stores typed LaTeX code
+            bpy.context.selected_objects[0]["LaTeX Code"] = latex_code
+
     except FileNotFoundError as e:
-        ErrorMessageBox("Please check that LaTeX is installed on your system.", "Compilation Error")
+        ErrorMessageBox("Please check that LaTeX is installed on your system and that its path is specified correctly.", "Compilation Error")
     except subprocess.CalledProcessError:
-        ErrorMessageBox("Please check your latex code for errors and that latex and dvisvgm are properly installed. "
-                        "Also, if using a custom preamble, check that it is formatted correctly.", "Compilation Error")
+        ErrorMessageBox("Please check your LaTeX code for errors and that LaTeX and dvisvgm are properly "
+                        "installed and their paths are specified correctly. Also, if using a custom preamble, check that it is formatted correctly.",
+                        "Compilation Error")
     finally:
         os.chdir(current_dir)
-        print("Finished trying to compile latex and create an svg file.")
+        print("Finished trying to compile LaTeX and create an svg file.")
 
 
 class LATEX2BLENDER_MT_Presets(Menu):
@@ -222,6 +272,8 @@ class OBJECT_OT_add_latex_preset(AddPresetBase, Operator):
     preset_defines = ['t = bpy.context.scene.my_tool']
 
     preset_values = [
+        't.custom_latex_path',
+        't.custom_dvisvgm_path',
         't.text_scale',
         't.x_loc',
         't.y_loc',
@@ -245,30 +297,78 @@ def panel_func(self, context):
     row.operator(OBJECT_OT_add_latex_preset.bl_idname, text="", icon='ADD')
     row.operator(OBJECT_OT_add_latex_preset.bl_idname, text="", icon='REMOVE').remove_active = True
 
-
-# Compile latex.
-class WM_OT_compile(Operator):
-    bl_idname = "wm.compile"
-    bl_label = "Compile Latex Code"
+# Compile latex as curve.
+class WM_OT_compile_as_curve(Operator):
+    bl_idname = "wm.compile_as_curve"
+    bl_label = "Compile as Curve"
 
     def execute(self, context):
         scene = context.scene
         t = scene.my_tool
         if t.latex_code == '' and t.custom_preamble_bool \
                 and t.preamble_path == '':
-            ErrorMessageBox("No Latex code has been entered and no preamble file has been chosen. Please enter some "
-                            "latex code and choose a .tex file for the preamble", "Multiple Errors")
+            ErrorMessageBox("No LaTeX code has been entered and no preamble file has been chosen. Please enter some "
+                            "LaTeX code and choose a .tex file for the preamble", "Multiple Errors")
         elif t.custom_material_bool and t.custom_material_value is None:
             ErrorMessageBox("No material has been chosen. Please choose a material.", "Custom Material Error")
         elif t.latex_code == '':
-            ErrorMessageBox("No Latex code has been entered. Please enter some Latex code.", "Latex Code Error")
+            ErrorMessageBox("No LaTeX code has been entered. Please enter some LaTeX code.", "LaTeX Code Error")
         elif t.custom_preamble_bool and t.preamble_path == '':
             ErrorMessageBox("No preamble file has been chosen. Please choose a file.", "Custom Preamble Error")
         else:
             with tempfile.TemporaryDirectory() as temp_dir:
-                import_latex(self, context, t.latex_code, t.text_scale, t.x_loc, t.y_loc, t.z_loc, t.x_rot, t.y_rot,
-                             t.z_rot, t.custom_preamble_bool, temp_dir, t.custom_material_bool, t.custom_material_value, t.preamble_path)
+                import_latex(self, context, t.latex_code, t.custom_latex_path, t.custom_dvisvgm_path, t.text_scale, t.x_loc, t.y_loc, t.z_loc, t.x_rot, t.y_rot,
+                             t.z_rot, t.custom_preamble_bool, temp_dir, t.custom_material_bool, t.custom_material_value, 'curve', t.preamble_path)
         return {'FINISHED'}
+
+# Compile latex as mesh.
+class WM_OT_compile_as_mesh(Operator):
+    bl_idname = "wm.compile_as_mesh"
+    bl_label = "Compile as Mesh"
+
+    def execute(self, context):
+        scene = context.scene
+        t = scene.my_tool
+        if t.latex_code == '' and t.custom_preamble_bool \
+                and t.preamble_path == '':
+            ErrorMessageBox("No LaTeX code has been entered and no preamble file has been chosen. Please enter some "
+                            "LaTeX code and choose a .tex file for the preamble", "Multiple Errors")
+        elif t.custom_material_bool and t.custom_material_value is None:
+            ErrorMessageBox("No material has been chosen. Please choose a material.", "Custom Material Error")
+        elif t.latex_code == '':
+            ErrorMessageBox("No LaTeX code has been entered. Please enter some LaTeX code.", "LaTeX Code Error")
+        elif t.custom_preamble_bool and t.preamble_path == '':
+            ErrorMessageBox("No preamble file has been chosen. Please choose a file.", "Custom Preamble Error")
+        else:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                import_latex(self, context, t.latex_code, t.custom_latex_path, t.custom_dvisvgm_path, t.text_scale, t.x_loc, t.y_loc, t.z_loc, t.x_rot, t.y_rot,
+                             t.z_rot, t.custom_preamble_bool, temp_dir, t.custom_material_bool, t.custom_material_value, 'mesh', t.preamble_path)
+        return {'FINISHED'}
+
+# Compile latex as grease pencil.
+class WM_OT_compile_as_grease_pencil(Operator):
+    bl_idname = "wm.compile_as_grease_pencil"
+    bl_label = "Compile as Grease Pencil"
+
+    def execute(self, context):
+        scene = context.scene
+        t = scene.my_tool
+        if t.latex_code == '' and t.custom_preamble_bool \
+                and t.preamble_path == '':
+            ErrorMessageBox("No LaTeX code has been entered and no preamble file has been chosen. Please enter some "
+                            "LaTeX code and choose a .tex file for the preamble", "Multiple Errors")
+        elif t.custom_material_bool and t.custom_material_value is None:
+            ErrorMessageBox("No material has been chosen. Please choose a material.", "Custom Material Error")
+        elif t.latex_code == '':
+            ErrorMessageBox("No LaTeX code has been entered. Please enter some LaTeX code.", "LaTeX Code Error")
+        elif t.custom_preamble_bool and t.preamble_path == '':
+            ErrorMessageBox("No preamble file has been chosen. Please choose a file.", "Custom Preamble Error")
+        else:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                import_latex(self, context, t.latex_code, t.custom_latex_path, t.custom_dvisvgm_path, t.text_scale, t.x_loc, t.y_loc, t.z_loc, t.x_rot, t.y_rot,
+                             t.z_rot, t.custom_preamble_bool, temp_dir, t.custom_material_bool, t.custom_material_value,'grease pencil', t.preamble_path)
+        return {'FINISHED'}
+
 
 
 class OBJECT_PT_latex2blender_panel(Panel):
@@ -285,13 +385,21 @@ class OBJECT_PT_latex2blender_panel(Panel):
         latex2blender_tool = scene.my_tool
 
         layout.prop(latex2blender_tool, "latex_code")
-
         layout.separator()
 
-        layout.label(text="Transform Settings")
-        layout.prop(latex2blender_tool, "text_scale")
+        box = layout.box()
+        box.label(text="Paths to latex and dvisvgm commands to ensure proper functioning of add-on. ")
+        row= box.row()
+        row.prop(latex2blender_tool, "custom_latex_path")
+        row = box.row()
+        row.prop(latex2blender_tool, "custom_dvisvgm_path")
 
-        split = layout.split()
+        box = layout.box()
+        box.label(text="Transform Settings")
+        row = box.row()
+        row.prop(latex2blender_tool, "text_scale")
+
+        split = box.split()
 
         col = split.column(align=True)
         col.label(text="Location:")
@@ -305,7 +413,9 @@ class OBJECT_PT_latex2blender_panel(Panel):
         col.prop(latex2blender_tool, "y_rot")
         col.prop(latex2blender_tool, "z_rot")
 
-        layout.separator()
+        layout.prop(latex2blender_tool, "custom_preamble_bool")
+        if latex2blender_tool.custom_preamble_bool:
+            layout.prop(latex2blender_tool, "preamble_path")
 
         layout.prop(latex2blender_tool, "custom_material_bool")
         if latex2blender_tool.custom_material_bool:
@@ -313,22 +423,21 @@ class OBJECT_PT_latex2blender_panel(Panel):
 
         layout.separator()
 
-        layout.prop(latex2blender_tool, "custom_preamble_bool")
-        if latex2blender_tool.custom_preamble_bool:
-            layout.prop(latex2blender_tool, "preamble_path")
-
-        layout.separator()
-
-        layout.operator("wm.compile")
-
-        layout.separator()
-
+        box = layout.box()
+        row = box.row()
+        row.operator("wm.compile_as_curve")
+        row = box.row()
+        row.operator("wm.compile_as_mesh")
+        row = box.row()
+        row.operator("wm.compile_as_grease_pencil")
 
 classes = (
     Settings,
     LATEX2BLENDER_MT_Presets,
     OBJECT_OT_add_latex_preset,
-    WM_OT_compile,
+    WM_OT_compile_as_curve,
+    WM_OT_compile_as_mesh,
+    WM_OT_compile_as_grease_pencil,
     OBJECT_PT_latex2blender_panel
 )
 
@@ -357,8 +466,6 @@ def unregister():
         unregister_class(cls)
     del bpy.types.Scene.my_tool
     OBJECT_PT_latex2blender_panel.remove(panel_func)
-    shutil.rmtree(l2b_presets)
-
 
 if __name__ == "__main__":
     register()
