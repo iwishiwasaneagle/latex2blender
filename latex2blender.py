@@ -243,7 +243,7 @@ def import_latex(self, context, latex_code, custom_latex_path, custom_dvisvgm_pa
                     bpy.context.selected_objects[0].material_slots[0].material = custom_material_value
 
             # Create custom property that stores typed LaTeX code
-            bpy.context.selected_objects[0]["LaTeX Code"] = latex_code
+            bpy.context.selected_objects[0]["Original LaTeX Code"] = latex_code
 
     except FileNotFoundError as e:
         ErrorMessageBox("Please check that LaTeX is installed on your system and that its path is specified correctly.", "Compilation Error")
