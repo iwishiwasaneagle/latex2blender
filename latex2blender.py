@@ -17,7 +17,8 @@ import bpy
 from bpy.props import (StringProperty,
                        BoolProperty,
                        FloatProperty,
-                       PointerProperty
+                       PointerProperty,
+                       EnumProperty
                        )
 
 from bpy.types import (Panel,
@@ -49,12 +50,12 @@ class Settings(PropertyGroup):
 
     latex_code: StringProperty(
         name="LaTeX Code",
-        description="Enter Latex Code",
+        description="Enter LaTeX Code",
         default="",
     )
 
     custom_latex_path: StringProperty(
-        name="latex Path",
+        name="latex",
         description="""
         Enter the path of the folder containing the latex command
         on your computer. If you are not sure where the latex command is
@@ -64,8 +65,41 @@ class Settings(PropertyGroup):
         subtype = 'DIR_PATH',
     )
 
+    custom_pdflatex_path: StringProperty(
+        name="pdflatex",
+        description="""
+        Enter the path of the folder containing the pdflatex command
+        on your computer. If you are not sure where the pdflatex command is
+        located, open your terminal/command prompt and type: \"where pdflatex\" """,
+        default = "",
+        update  = lambda s,c: rel_to_abs('custom_pdflatex_path'),
+        subtype = 'DIR_PATH',
+    )
+
+    custom_xelatex_path: StringProperty(
+        name="xelatex",
+        description="""
+        Enter the path of the folder containing the xelatex command
+        on your computer. If you are not sure where the xelatex command is
+        located, open your terminal/command prompt and type: \"where xelatex\" """,
+        default = "",
+        update  = lambda s,c: rel_to_abs('custom_xelatex_path'),
+        subtype = 'DIR_PATH',
+    )
+
+    custom_lualatex_path: StringProperty(
+        name="lualatex",
+        description="""
+        Enter the path of the folder containing the lualatex command
+        on your computer. If you are not sure where the lualatex command is
+        located, open your terminal/command prompt and type: \"where lualatex\" """,
+        default = "",
+        update  = lambda s,c: rel_to_abs('custom_lualatex_path'),
+        subtype = 'DIR_PATH',
+    )
+
     custom_dvisvgm_path: StringProperty(
-        name="dvisvgm Path",
+        name="dvisvgm",
         description="""
         Enter the path of the folder containing the dvisvgm command
         on your computer. If you are not sure where the dvisvgm command is
@@ -73,6 +107,17 @@ class Settings(PropertyGroup):
         default = "",
         update  = lambda s,c: rel_to_abs('custom_dvisvgm_path'),
         subtype = 'DIR_PATH',
+    )
+
+    command_selection: EnumProperty(
+        name="Command",
+        description="Select the command used to compile LaTeX code",
+        items=[
+            ('latex', 'latex', 'Use latex command to compile code'),
+            ('pdflatex', 'pdflatex', 'Use pdflatex command to compile code'),
+            ('xelatex', 'xelatex', 'Use xelatex command to compile code'),
+            ('lualatex', 'lualatex', 'Use lualatex command to compile code')
+        ]
     )
 
     text_scale: FloatProperty(
@@ -151,8 +196,12 @@ def ErrorMessageBox(message, title):
 
 
 # Imports compiled latex code into blender given chosen settings.
-def import_latex(self, context, latex_code, custom_latex_path, custom_dvisvgm_path, text_scale, x_loc, y_loc, z_loc, x_rot, y_rot, z_rot, custom_preamble_bool,
-                 temp_dir, custom_material_bool, custom_material_value, compile_mode, preamble_path=None):
+def import_latex(self, context, latex_code, custom_latex_path,
+                 custom_pdflatex_path, custom_xelatex_path, custom_lualatex_path,
+                 custom_dvisvgm_path, command_selection, text_scale, x_loc,
+                 y_loc, z_loc, x_rot,y_rot, z_rot, custom_preamble_bool,
+                 temp_dir, custom_material_bool, custom_material_value,
+                 compile_mode, preamble_path=None):
 
     # Set current directory to temp_directory
     current_dir = os.getcwd()
@@ -183,12 +232,36 @@ def import_latex(self, context, latex_code, custom_latex_path, custom_dvisvgm_pa
 
         if custom_latex_path != "" and custom_latex_path != '/Library/TeX/texbin':
             local_env['PATH'] = (custom_latex_path + os.pathsep + local_env['PATH'])
-
-        if custom_dvisvgm_path != "" and custom_dvisvgm_path != custom_latex_path and custom_dvisvgm_path != '/Library/TeX/texbin':
+        if (custom_pdflatex_path != "" and custom_pdflatex_path != '/Library/TeX/texbin'
+                and custom_pdflatex_path != custom_latex_path):
+            local_env['PATH'] = (custom_pdflatex_path + os.pathsep + local_env['PATH'])
+        if (custom_xelatex_path != "" and custom_xelatex_path != '/Library/TeX/texbin'
+                and custom_xelatex_path != custom_latex_path
+                and custom_xelatex_path != custom_pdflatex_path):
+            local_env['PATH'] = (custom_xelatex_path + os.pathsep + local_env['PATH'])
+        if (custom_lualatex_path != "" and custom_lualatex_path != '/Library/TeX/texbin'
+                and custom_lualatex_path != custom_latex_path
+                and custom_lualatex_path != custom_pdflatex_path
+                and custom_lualatex_path != custom_xelatex_path):
+            local_env['PATH'] = (custom_lualatex_path + os.pathsep + local_env['PATH'])
+        if (custom_dvisvgm_path != "" and custom_dvisvgm_path != '/Library/TeX/texbin'
+                and custom_dvisvgm_path != custom_latex_path
+                and custom_dvisvgm_path != custom_pdflatex_path
+                and custom_dvisvgm_path != custom_xelatex_path
+                and custom_dvisvgm_path != custom_lualatex_path):
             local_env['PATH'] = (custom_dvisvgm_path + os.pathsep + local_env['PATH'])
-
-        subprocess.call(["latex", "-interaction=batchmode", temp_file_name + ".tex"], env=local_env)
-        subprocess.call(["dvisvgm", "--no-fonts", temp_file_name + ".dvi"], env=local_env)
+        if command_selection == "latex":
+            subprocess.call(["latex", "-interaction=batchmode",  temp_file_name + ".tex"], env=local_env)
+            subprocess.call(["dvisvgm", "--no-fonts", temp_file_name + ".dvi"], env=local_env)
+        elif command_selection == "pdflatex":
+            subprocess.call(["pdflatex", "-interaction=batchmode", "-output-format=dvi", temp_file_name + ".tex"], env=local_env)
+            subprocess.call(["dvisvgm", "--no-fonts", temp_file_name + ".dvi"], env=local_env)
+        elif command_selection == "xelatex":
+            subprocess.call(["xelatex", "-interaction=batchmode", "-no-pdf", temp_file_name + ".tex"], env=local_env)
+            subprocess.call(["dvisvgm", "--no-fonts", temp_file_name + ".xdv"], env=local_env)
+        else:
+            subprocess.call(["lualatex", "-interaction=batchmode", "-output-format=dvi", temp_file_name + ".tex"], env=local_env)
+            subprocess.call(["dvisvgm", "--no-fonts", temp_file_name + ".dvi"], env=local_env)
 
         svg_file_list = glob.glob("*.svg")
         bpy.ops.object.select_all(action='DESELECT')
@@ -273,7 +346,11 @@ class OBJECT_OT_add_latex_preset(AddPresetBase, Operator):
 
     preset_values = [
         't.custom_latex_path',
+        't.custom_pdflatex_path',
+        't.custom_xelatex_path',
+        't.custom_lualatex_path',
         't.custom_dvisvgm_path',
+        't.command_selection',
         't.text_scale',
         't.x_loc',
         't.y_loc',
@@ -317,8 +394,14 @@ class WM_OT_compile_as_curve(Operator):
             ErrorMessageBox("No preamble file has been chosen. Please choose a file.", "Custom Preamble Error")
         else:
             with tempfile.TemporaryDirectory() as temp_dir:
-                import_latex(self, context, t.latex_code, t.custom_latex_path, t.custom_dvisvgm_path, t.text_scale, t.x_loc, t.y_loc, t.z_loc, t.x_rot, t.y_rot,
-                             t.z_rot, t.custom_preamble_bool, temp_dir, t.custom_material_bool, t.custom_material_value, 'curve', t.preamble_path)
+                import_latex(self, context, t.latex_code, t.custom_latex_path,
+                             t.custom_pdflatex_path, t.custom_xelatex_path,
+                             t.custom_lualatex_path, t.custom_dvisvgm_path,
+                             t.command_selection, t.text_scale, t.x_loc,
+                             t.y_loc, t.z_loc, t.x_rot, t.y_rot, t.z_rot,
+                             t.custom_preamble_bool, temp_dir,
+                             t.custom_material_bool, t.custom_material_value,
+                             'curve', t.preamble_path)
         return {'FINISHED'}
 
 # Compile latex as mesh.
@@ -341,8 +424,14 @@ class WM_OT_compile_as_mesh(Operator):
             ErrorMessageBox("No preamble file has been chosen. Please choose a file.", "Custom Preamble Error")
         else:
             with tempfile.TemporaryDirectory() as temp_dir:
-                import_latex(self, context, t.latex_code, t.custom_latex_path, t.custom_dvisvgm_path, t.text_scale, t.x_loc, t.y_loc, t.z_loc, t.x_rot, t.y_rot,
-                             t.z_rot, t.custom_preamble_bool, temp_dir, t.custom_material_bool, t.custom_material_value, 'mesh', t.preamble_path)
+                import_latex(self, context, t.latex_code, t.custom_latex_path,
+                             t.custom_pdflatex_path, t.custom_xelatex_path,
+                             t.custom_lualatex_path, t.custom_dvisvgm_path,
+                             t.command_selection, t.text_scale, t.x_loc,
+                             t.y_loc, t.z_loc, t.x_rot, t.y_rot, t.z_rot,
+                             t.custom_preamble_bool, temp_dir,
+                             t.custom_material_bool, t.custom_material_value,
+                             'mesh', t.preamble_path)
         return {'FINISHED'}
 
 # Compile latex as grease pencil.
@@ -365,8 +454,14 @@ class WM_OT_compile_as_grease_pencil(Operator):
             ErrorMessageBox("No preamble file has been chosen. Please choose a file.", "Custom Preamble Error")
         else:
             with tempfile.TemporaryDirectory() as temp_dir:
-                import_latex(self, context, t.latex_code, t.custom_latex_path, t.custom_dvisvgm_path, t.text_scale, t.x_loc, t.y_loc, t.z_loc, t.x_rot, t.y_rot,
-                             t.z_rot, t.custom_preamble_bool, temp_dir, t.custom_material_bool, t.custom_material_value,'grease pencil', t.preamble_path)
+                import_latex(self, context, t.latex_code, t.custom_latex_path,
+                             t.custom_pdflatex_path, t.custom_xelatex_path,
+                             t.custom_lualatex_path, t.custom_dvisvgm_path,
+                             t.command_selection, t.text_scale, t.x_loc,
+                             t.y_loc, t.z_loc, t.x_rot, t.y_rot, t.z_rot,
+                             t.custom_preamble_bool, temp_dir,
+                             t.custom_material_bool, t.custom_material_value,
+                             'grease pencil', t.preamble_path)
         return {'FINISHED'}
 
 
@@ -387,10 +482,19 @@ class OBJECT_PT_latex2blender_panel(Panel):
         layout.prop(latex2blender_tool, "latex_code")
         layout.separator()
 
+        layout.prop(latex2blender_tool, "command_selection")
+        layout.separator
+
         box = layout.box()
-        box.label(text="Paths to latex and dvisvgm commands to ensure proper functioning of add-on. ")
+        box.label(text="Paths to directories containing commands.")
         row= box.row()
         row.prop(latex2blender_tool, "custom_latex_path")
+        row = box.row()
+        row.prop(latex2blender_tool, "custom_pdflatex_path")
+        row = box.row()
+        row.prop(latex2blender_tool, "custom_xelatex_path")
+        row = box.row()
+        row.prop(latex2blender_tool, "custom_lualatex_path")
         row = box.row()
         row.prop(latex2blender_tool, "custom_dvisvgm_path")
 
