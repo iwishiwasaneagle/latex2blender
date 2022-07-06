@@ -2,7 +2,7 @@ bl_info = {
     "name": "latex2blender",
     "description": "Enables user to write LaTeX in Blender.",
     "author": "Peter K. Johnson and George H. Seelinger",
-    "version": (1, 0, 5),
+    "version": (1, 0, 6),
     "blender": (2, 80, 0),
     "location": "View3D > Sidebar",
     "warning": "",
@@ -251,25 +251,33 @@ def import_latex(self, context, latex_code, custom_latex_path,
                 and custom_dvisvgm_path != custom_lualatex_path):
             local_env['PATH'] = (custom_dvisvgm_path + os.pathsep + local_env['PATH'])
         if command_selection == "latex":
-            subprocess.call(["latex", "-interaction=batchmode",  temp_file_name + ".tex"], env=local_env)
-            subprocess.call(["dvisvgm", "--no-fonts", temp_file_name + ".dvi"], env=local_env)
+            tex_process = subprocess.run(["latex", "-interaction=nonstopmode", temp_file_name + ".tex"], env=local_env, text=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
         elif command_selection == "pdflatex":
-            subprocess.call(["pdflatex", "-interaction=batchmode", "-output-format=dvi", temp_file_name + ".tex"], env=local_env)
-            subprocess.call(["dvisvgm", "--no-fonts", temp_file_name + ".dvi"], env=local_env)
+            tex_process = subprocess.run(["pdflatex", "-interaction=nonstopmode", "-output-format=dvi",temp_file_name + ".tex"], env=local_env, text=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
         elif command_selection == "xelatex":
-            subprocess.call(["xelatex", "-interaction=batchmode", "-no-pdf", temp_file_name + ".tex"], env=local_env)
-            subprocess.call(["dvisvgm", "--no-fonts", temp_file_name + ".xdv"], env=local_env)
+            tex_process = subprocess.run(["xelatex", "-interaction=nonstopmode", "-no-pdf", temp_file_name + ".tex"], env=local_env, text=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
         else:
-            subprocess.call(["lualatex", "-interaction=batchmode", "-output-format=dvi", temp_file_name + ".tex"], env=local_env)
-            subprocess.call(["dvisvgm", "--no-fonts", temp_file_name + ".dvi"], env=local_env)
-
+            tex_process = subprocess.run(["lualatex", "-interaction=nonstopmode", "-output-format=dvi", temp_file_name + ".tex"], env=local_env, text=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+        dvi2svgm_process = subprocess.run(["dvisvgm", "--no-fonts", temp_file_name + ".dvi"], env=local_env, text=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
         svg_file_list = glob.glob("*.svg")
         bpy.ops.object.select_all(action='DESELECT')
 
         if len(svg_file_list) == 0:
-            ErrorMessageBox("Please check your LaTeX code for errors and that LaTeX and dvisvgm are properly "
-                            "installed and their paths are specified correctly. Also, if using a custom preamble, check that it is formatted correctly.",
-                            "Compilation Error")
+            self.report({"ERROR"},
+"Please check your LaTeX code for errors and that LaTeX and dvisvgm are properly "
+                             "installed and their paths are specified correctly. Also, if using a custom preamble, check that it is formatted correctly. \n"
+                             "Tex return code " + str(tex_process.returncode) + "\n"
+                             "dvi2svgm return code " + str(dvi2svgm_process.returncode) + "\n"
+                             "Tex error message: " + str(tex_process.stdout) + "\n"
+                             "dvi2svgm error message: " + str(dvi2svgm_process.stdout)
+                         )
+            # ErrorMessageBox("Please check your LaTeX code for errors and that LaTeX and dvisvgm are properly "
+            #                 "installed and their paths are specified correctly. Also, if using a custom preamble, check that it is formatted correctly. "
+            #                 "Tex return code " + str(tex_process.returncode) + "\n"
+            #                 "dvi2svgm return code " + str(dvi2svgm_process.returncode) + "\n"
+            #                 "Tex error message: " + str(tex_process.stdout) + "\n"
+            #                 "dvi2svgm error message: " + str(dvi2svgm_process.stdout),
+            #                 "Compilation Error")
         else:
             svg_file_path = temp_dir + os.sep + svg_file_list[0]
 
@@ -320,9 +328,10 @@ def import_latex(self, context, latex_code, custom_latex_path,
 
     except FileNotFoundError as e:
         ErrorMessageBox("Please check that LaTeX is installed on your system and that its path is specified correctly.", "Compilation Error")
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
         ErrorMessageBox("Please check your LaTeX code for errors and that LaTeX and dvisvgm are properly "
-                        "installed and their paths are specified correctly. Also, if using a custom preamble, check that it is formatted correctly.",
+                        "installed and their paths are specified correctly. Also, if using a custom preamble, check that it is formatted correctly. "
+                        "Return code: " + str(e.returncode) + " " + str(e.output),
                         "Compilation Error")
     finally:
         os.chdir(current_dir)
