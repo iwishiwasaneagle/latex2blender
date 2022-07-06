@@ -207,6 +207,7 @@ def import_latex(self, context, latex_code, custom_latex_path,
     # Set current directory to temp_directory
     current_dir = os.getcwd()
     os.chdir(temp_dir)
+    temp_dir = os.path.realpath(temp_dir)
 
     # Create temp latex file with specified preamble.
     temp_file_name = temp_dir + os.sep + 'temp'
@@ -222,7 +223,6 @@ def import_latex(self, context, latex_code, custom_latex_path,
     # Add latex code to temp.tex and close the file.
     temp.write('\n\\begin{document}\n' + latex_code + '\n\\end{document}')
     temp.close()
-    time.sleep(60)
 
     # Try to compile temp.tex and create an svg file
     try:
