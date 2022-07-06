@@ -227,7 +227,6 @@ def import_latex(self, context, latex_code, custom_latex_path,
     # Try to compile temp.tex and create an svg file
     try:
         # Updates 'PATH' to include reference to folder containing latex and dvisvgm executable files.
-        # This only matters when running on MacOS. It is unnecessary for Linux and Windows.
         latex_exec_path = '/Library/TeX/texbin'
         local_env = os.environ.copy()
         local_env['PATH'] = (latex_exec_path + os.pathsep + local_env['PATH'])
@@ -260,7 +259,7 @@ def import_latex(self, context, latex_code, custom_latex_path,
             tex_process = subprocess.run(["xelatex", "-interaction=nonstopmode", "-no-pdf", temp_file_name + ".tex"], env=local_env, text=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
         else:
             tex_process = subprocess.run(["lualatex", "-interaction=nonstopmode", "-output-format=dvi", temp_file_name + ".tex"], env=local_env, text=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
-        dvi2svgm_process = subprocess.run(["dvisvgm", "--no-fonts", temp_file_name + ".dvi"], env=local_env, text=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+        dvisvgm_process = subprocess.run(["dvisvgm", "--no-fonts", temp_file_name + ".dvi"], env=local_env, text=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
         svg_file_list = glob.glob("*.svg")
         bpy.ops.object.select_all(action='DESELECT')
 
@@ -269,17 +268,11 @@ def import_latex(self, context, latex_code, custom_latex_path,
 "Please check your LaTeX code for errors and that LaTeX and dvisvgm are properly "
                              "installed and their paths are specified correctly. Also, if using a custom preamble, check that it is formatted correctly. \n"
                              "Tex return code " + str(tex_process.returncode) + "\n"
-                             "dvi2svgm return code " + str(dvi2svgm_process.returncode) + "\n"
+                             "dvi2svgm return code " + str(dvisvgm_process.returncode) + "\n"
                              "Tex error message: " + str(tex_process.stdout) + "\n"
-                             "dvi2svgm error message: " + str(dvi2svgm_process.stdout)
+                             "dvi2svgm error message: " + str(dvisvgm_process.stdout)
                          )
-            # ErrorMessageBox("Please check your LaTeX code for errors and that LaTeX and dvisvgm are properly "
-            #                 "installed and their paths are specified correctly. Also, if using a custom preamble, check that it is formatted correctly. "
-            #                 "Tex return code " + str(tex_process.returncode) + "\n"
-            #                 "dvi2svgm return code " + str(dvi2svgm_process.returncode) + "\n"
-            #                 "Tex error message: " + str(tex_process.stdout) + "\n"
-            #                 "dvi2svgm error message: " + str(dvi2svgm_process.stdout),
-            #                 "Compilation Error")
+
         else:
             svg_file_path = temp_dir + os.sep + svg_file_list[0]
 
