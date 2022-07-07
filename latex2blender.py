@@ -38,7 +38,6 @@ import subprocess
 import tempfile
 import shutil
 import math
-import time
 
 
 def rel_to_abs(sp_name):
