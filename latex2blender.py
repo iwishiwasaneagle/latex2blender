@@ -290,6 +290,7 @@ def import_latex(self, context, latex_code, custom_latex_path,
             bpy.ops.object.join()
             bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS', center='MEDIAN')
             active_obj.scale = (600*text_scale, 600*text_scale, 600*text_scale)
+            bpy.ops.object.transform_apply(location = False, scale = True, rotation = False)
             active_obj.location = (x_loc, y_loc, z_loc)
             active_obj.rotation_euler = (math.radians(x_rot), math.radians(y_rot), math.radians(z_rot))
             # Move curve to scene collection and delete the temp.svg collection. Then rename curve.
